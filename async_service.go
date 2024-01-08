@@ -9,7 +9,8 @@ import (
 )
 
 type Payload struct {
-	ID int `json:"id"`
+	ID         int    `json:"id_order"`
+	SessionKey string `json:"session_key"`
 	// Add other fields if needed
 }
 
@@ -24,51 +25,72 @@ func handlePost(w http.ResponseWriter, r *http.Request) {
 		buf := new(bytes.Buffer)
 		_, err := buf.ReadFrom(r.Body)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logError(w, "Error reading request body", http.StatusInternalServerError)
 			return
 		}
+
 		// Process the request body
 		var payload Payload
 		err = json.Unmarshal(buf.Bytes(), &payload)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			logError(w, "Error decoding JSON body", http.StatusBadRequest)
 			return
 		}
 
-		// Access the ID from the payload
+		// Access the ID and session key from the payload
 		id := payload.ID
-		fmt.Println("Received POST request with ID:", id)
+		sessionKey := payload.SessionKey
 
-		// Trigger the handleDelete function asynchronously
-		go handleDelete(w, r, id)
+		fmt.Println("Received POST request with ID:", id)
+		fmt.Println("Received POST request with SessionKey:", sessionKey)
+
+		// Trigger the handleUpdateStatus function asynchronously
+		go handleUpdateStatus(w, r, id, sessionKey)
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("POST request processed successfully"))
 	} else {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		logError(w, "Invalid request method", http.StatusMethodNotAllowed)
 	}
 }
 
-func handleDelete(w http.ResponseWriter, r *http.Request, id int) {
+func handleUpdateStatus(w http.ResponseWriter, r *http.Request, id int, sessionKey string) {
 	// Simulate waiting for 5 seconds
 	time.Sleep(5 * time.Second)
 
-	// Perform a DELETE request to another server with the ID
-	deleteURL := fmt.Sprintf("http://127.0.0.1:8000/cargo/%d/", id)
-	req, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
+	// Prepare the JSON body
+	requestBody := map[string]string{"status": "завершён"}
+	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-		fmt.Println("Error creating DELETE request:", err)
+		logError(w, "Error encoding JSON body", http.StatusInternalServerError)
 		return
 	}
+
+	// Perform a PUT request to another server with the ID and session key
+	updateStatusURL := fmt.Sprintf("http://localhost:8000/api/update_status/%d/set_moderator_status/", id)
+	req, err := http.NewRequest(http.MethodPut, updateStatusURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		logError(w, "Error creating PUT request", http.StatusInternalServerError)
+		return
+	}
+
+	// Set the session key in the headers
+	req.Header.Set("Cookie", "session_key="+sessionKey)
+	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
-	deleteResp, err := client.Do(req)
+	updateStatusResp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error performing DELETE request:", err)
+		logError(w, fmt.Sprintf("Error performing PUT request: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	defer deleteResp.Body.Close()
+	defer updateStatusResp.Body.Close()
 
-	fmt.Println("DELETE request to another server completed with status code:", deleteResp.Status)
+	fmt.Println("PUT request to another server completed with status code:", updateStatusResp.Status)
+}
+
+func logError(w http.ResponseWriter, message string, statusCode int) {
+	fmt.Println(message)
+	http.Error(w, message, statusCode)
 }
