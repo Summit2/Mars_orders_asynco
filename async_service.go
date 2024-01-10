@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"time"
 )
@@ -58,8 +59,11 @@ func handleUpdateStatus(w http.ResponseWriter, r *http.Request, id int, sessionK
 	// Simulate waiting for 5 seconds
 	time.Sleep(5 * time.Second)
 
-	// Prepare the JSON body
-	requestBody := map[string]string{"status": "завершён"}
+	// Generate a random boolean value (80% true, 20% false)
+	isDelivered := rand.Float32() < 0.8
+
+	// Prepare the JSON body with the randomly generated is_delivered value
+	requestBody := map[string]bool{"is_delivered": isDelivered}
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
 		logError(w, "Error encoding JSON body", http.StatusInternalServerError)
@@ -67,7 +71,7 @@ func handleUpdateStatus(w http.ResponseWriter, r *http.Request, id int, sessionK
 	}
 
 	// Perform a PUT request to another server with the ID and session key
-	updateStatusURL := fmt.Sprintf("http://localhost:8000/api/update_status/%d/set_moderator_status/", id)
+	updateStatusURL := fmt.Sprintf("http://localhost:8000/api/order/%d/update/", id)
 	req, err := http.NewRequest(http.MethodPut, updateStatusURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		logError(w, "Error creating PUT request", http.StatusInternalServerError)
